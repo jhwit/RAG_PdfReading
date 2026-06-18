@@ -112,7 +112,7 @@ const handleSend = async () => {
   if (!text || chatStore.isLoading) return
 
   inputText.value = ''
-  await chatStore.sendMessage(text)
+  await chatStore.sendMessage(text, { stream: true })
   await scrollToBottom()
 }
 

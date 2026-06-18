@@ -44,10 +44,12 @@ export const useChatStore = defineStore('chat', () => {
         await queryApi.askStream(question, (event) => {
           if (event.type === 'chunk') {
             fullContent += event.content || ''
+            streamingContent.value = fullContent
             updateLastMessage(fullContent, [])
           } else if (event.type === 'sources') {
             updateLastMessage(fullContent, event.sources || [])
           } else if (event.type === 'error') {
+            streamingContent.value = `错误: ${event.message || '未知错误'}`
             updateLastMessage(`错误: ${event.message || '未知错误'}`, [])
           }
         }, { topK })

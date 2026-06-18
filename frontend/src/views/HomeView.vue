@@ -11,7 +11,21 @@
         </p>
       </div>
 
-      <div class="stats-row">
+      <el-alert
+        v-if="store.fetchError"
+        title="数据加载失败"
+        type="error"
+        :description="store.fetchError"
+        show-icon
+        closable
+        class="error-banner"
+      />
+
+      <div v-if="store.loading" class="loading-stats">
+        <el-skeleton :rows="1" animated />
+      </div>
+
+      <div v-else class="stats-row">
         <el-card class="stat-card" shadow="hover">
           <div class="stat-inner">
             <el-icon :size="32" color="var(--el-color-primary)"><Document /></el-icon>
@@ -103,6 +117,15 @@ onMounted(() => {
   line-height: 1.8;
   max-width: 640px;
   margin: 0 auto;
+}
+
+.error-banner {
+  max-width: 640px;
+  margin: 0 auto 24px;
+}
+
+.loading-stats {
+  margin-bottom: 32px;
 }
 
 .stats-row {

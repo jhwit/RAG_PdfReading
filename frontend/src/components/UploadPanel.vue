@@ -2,12 +2,9 @@
   <div class="upload-panel">
     <el-upload
       drag
-      :action="uploadAction"
       accept=".pdf"
+      :http-request="handleHttpRequest"
       :before-upload="handleBeforeUpload"
-      :on-progress="handleProgress"
-      :on-success="handleSuccess"
-      :on-error="handleError"
       :show-file-list="false"
     >
       <el-icon class="upload-icon"><UploadFilled /></el-icon>
@@ -28,24 +25,25 @@
       status="active"
       class="upload-progress"
     />
+
+    <el-progress
+      v-if="progress === 100"
+      :percentage="100"
+      :stroke-width="16"
+      status="success"
+      class="upload-progress"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-
-const props = defineProps({
-  uploadAction: {
-    type: String,
-    default: '/api/v1/documents/upload'
-  }
-})
+import { useUpload } from '@/composables/useUpload.js'
 
 const emit = defineEmits(['success', 'error'])
 
-const progress = ref(0)
+const { progress, uploading: _uploading, upload } = useUpload()
 
 const handleBeforeUpload = (file) => {
   const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf')
@@ -60,26 +58,25 @@ const handleBeforeUpload = (file) => {
     return false
   }
 
-  progress.value = 0
   return true
 }
 
-const handleProgress = (event) => {
-  progress.value = Math.round((event.loaded * 100) / event.total)
-}
-
-const handleSuccess = (response) => {
-  progress.value = 100
-  ElMessage.success('上传成功，文档已加入处理队列')
-  emit('success', response)
-  setTimeout(() => { progress.value = 0 }, 1500)
-}
-
-const handleError = (error) => {
-  progress.value = 0
-  const message = error.message || '上传失败'
-  ElMessage.error(message)
-  emit('error', error)
+const handleHttpRequest = async (options) => {
+  const { file, onSuccess, onError } = options
+  try {
+    const result = await upload(file)
+    ElMessage.success('上传成功，文档已加入处理队列')
+    onSuccess(result)
+    emit('success', result)
+    // Reset progress after 1.5s delay so the user can see the 100% state
+    setTimeout(() => { progress.value = 0 }, 1500)
+  } catch (error) {
+    // Error messaging is handled by the Axios response interceptor
+    const message = error.response?.data?.message || error.message || '上传失败'
+    ElMessage.error(message)
+    onError(error)
+    emit('error', error)
+  }
 }
 </script>
 

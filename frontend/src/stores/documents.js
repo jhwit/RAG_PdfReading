@@ -6,6 +6,7 @@ export const useDocumentStore = defineStore('documents', () => {
   // State
   const documents = ref([])
   const loading = ref(false)
+  const fetchError = ref('')
   const uploadProgress = ref(0)
 
   // Getters
@@ -22,11 +23,13 @@ export const useDocumentStore = defineStore('documents', () => {
   // Actions
   const fetchDocuments = async () => {
     loading.value = true
+    fetchError.value = ''
     try {
       const res = await documentsApi.list()
       // API returns { code, message, data: { items, total } }
       documents.value = res.data?.items || res.items || []
     } catch (error) {
+      fetchError.value = error.message || '获取文档列表失败'
       console.error('Failed to fetch documents:', error)
     } finally {
       loading.value = false
@@ -56,6 +59,7 @@ export const useDocumentStore = defineStore('documents', () => {
   return {
     documents,
     loading,
+    fetchError,
     uploadProgress,
     completedDocs,
     processingDocs,
