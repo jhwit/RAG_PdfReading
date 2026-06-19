@@ -1,4 +1,4 @@
-﻿"""Application configuration."""
+"""Application configuration."""
 from functools import lru_cache
 from pydantic_settings import BaseSettings
 from typing import Optional
@@ -16,7 +16,9 @@ class Settings(BaseSettings):
 
     # LLM / Embedding
     embedding_model: str = "BAAI/bge-m3"
+    embedding_device: str = "auto"
     llm_model: str = "gpt-4o"
+    llm_temperature: float = 0.1
     openai_api_key: Optional[str] = None
     openai_base_url: Optional[str] = None
 
@@ -24,6 +26,7 @@ class Settings(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     qdrant_collection: str = "documents"
+    qdrant_api_key: Optional[str] = None
 
     # Paths
     data_dir: str = "./data"
@@ -33,6 +36,12 @@ class Settings(BaseSettings):
     # Chunking
     chunk_size: int = 512
     chunk_overlap: int = 50
+    chunk_separator: str = "\n\n"
+
+    # Retrieval
+    default_top_k: int = 5
+    max_top_k: int = 20
+    similarity_threshold: float = 0.7
 
     class Config:
         env_file = ".env"
