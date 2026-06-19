@@ -19,7 +19,6 @@ from app.services.vector_store import VectorStore
 
 logger = setup_logger("rag_kb.document")
 
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 ALLOWED_MIME = {"application/pdf"}
 
 
@@ -56,7 +55,7 @@ class DocumentService:
         file.file.seek(0, os.SEEK_END)
         size = file.file.tell()
         file.file.seek(0)
-        if size > MAX_FILE_SIZE:
+        if size > self.settings.max_file_size_mb * 1024 * 1024:
             raise FileTooLargeError()
 
     async def save_upload(self, file: UploadFile) -> Tuple[Path, str]:
@@ -109,6 +108,12 @@ class DocumentService:
                 self.pdf_parser.get_metadata, file_path
             )
             doc_record["total_pages"] = metadata.get("total_pages", len(chunks))
+            doc_record["metadata"] = {
+                "title": metadata.get("title", ""),
+                "author": metadata.get("author", ""),
+                "subject": metadata.get("subject", ""),
+                "total_pages": metadata.get("total_pages", len(chunks)),
+            }
             doc_record["message"] = f"Parsed {len(chunks)} pages"
 
             # Split into chunks
@@ -126,12 +131,12 @@ class DocumentService:
             doc_record["total_chunks"] = len(all_chunks)
 
             # Generate embeddings in batches
-            BATCH_SIZE = 32
+            batch_size = self.settings.embedding_batch_size
             texts = [c["content"] for c in all_chunks]
             all_embeddings = []
 
-            for i in range(0, len(texts), BATCH_SIZE):
-                batch_texts = texts[i:i + BATCH_SIZE]
+            for i in range(0, len(texts), batch_size):
+                batch_texts = texts[i:i + batch_size]
                 batch_embeddings = await run_in_threadpool(
                     self.embedding_service.embed_texts, batch_texts
                 )

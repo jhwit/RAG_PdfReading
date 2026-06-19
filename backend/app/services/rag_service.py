@@ -65,20 +65,7 @@ class RAGService:
                 raise NoRelevantDocsError()
 
             # Build context from retrieved chunks
-            context_parts = []
-            sources = []
-            for hit in results:
-                payload = hit["payload"]
-                context_parts.append(f"[来源: {payload.get('doc_name', '')}, 第{payload.get('page', '?')}页]\n{payload.get('content', '')}")
-                sources.append({
-                    "doc_id": payload.get("doc_id", ""),
-                    "doc_name": payload.get("doc_name", ""),
-                    "page": payload.get("page"),
-                    "chunk_index": payload.get("chunk_index"),
-                    "score": round(hit["score"], 4),
-                })
-
-            context = "\n\n---\n\n".join(context_parts)
+            context, sources = self._build_context_and_sources(results)
 
             # Generate answer with LLM
             prompt = self._build_prompt(question, context)
@@ -129,20 +116,7 @@ class RAGService:
                 return
 
             # Build context
-            context_parts = []
-            sources = []
-            for hit in results:
-                payload = hit["payload"]
-                context_parts.append(f"[来源: {payload.get('doc_name', '')}, 第{payload.get('page', '?')}页]\n{payload.get('content', '')}")
-                sources.append({
-                    "doc_id": payload.get("doc_id", ""),
-                    "doc_name": payload.get("doc_name", ""),
-                    "page": payload.get("page"),
-                    "chunk_index": payload.get("chunk_index"),
-                    "score": round(hit["score"], 4),
-                })
-
-            context = "\n\n---\n\n".join(context_parts)
+            context, sources = self._build_context_and_sources(results)
             prompt = self._build_prompt(question, context)
 
             # Streaming LLM response
@@ -171,6 +145,25 @@ class RAGService:
             logger.error(f"Streaming query failed: {str(e)}")
             yield self._sse_event("error", {"message": str(e)})
             yield self._sse_event("end", {"query_time_ms": int((time.time() - start_time) * 1000)})
+
+    def _build_context_and_sources(self, results: List[dict]) -> tuple:
+        """Build context string and source list from search results."""
+        context_parts = []
+        sources = []
+        for hit in results:
+            payload = hit["payload"]
+            context_parts.append(
+                f"[来源: {payload.get('doc_name', '')}, 第{payload.get('page', '?')}页]\n"
+                f"{payload.get('content', '')}"
+            )
+            sources.append({
+                "doc_id": payload.get("doc_id", ""),
+                "doc_name": payload.get("doc_name", ""),
+                "page": payload.get("page"),
+                "chunk_index": payload.get("chunk_index"),
+                "score": round(hit["score"], 4),
+            })
+        return "\n\n---\n\n".join(context_parts), sources
 
     def _validate_query(self, question: str, top_k: int) -> int:
         """Validate query parameters and return clamped top_k."""

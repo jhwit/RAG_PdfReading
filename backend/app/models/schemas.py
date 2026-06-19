@@ -1,4 +1,13 @@
 ﻿"""Pydantic schemas for API requests and responses."""
+
+# These Pydantic models define the API contract.
+# They are used for OpenAPI schema generation when wired as response_model on routes.
+# Current routes use response_model=dict for flexibility; switch to these when stable.
+__all__ = [
+    "DocumentStatus", "SourceInfo", "DocumentUploadResponse", "DocumentListItem",
+    "QueryRequest", "QueryResponse", "ChunkItem", "HealthResponse", "DocumentDeleteResponse",
+]
+
 from pydantic import BaseModel, Field
 from typing import Optional, List, Any
 from datetime import datetime

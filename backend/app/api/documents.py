@@ -99,11 +99,12 @@ async def get_document(
             "status": doc["status"],
             "total_pages": doc.get("total_pages"),
             "total_chunks": doc.get("total_chunks"),
-            "metadata": {
+            "metadata": doc.get("metadata", {
                 "title": doc.get("filename", ""),
                 "author": "",
+                "subject": "",
                 "total_pages": doc.get("total_pages", 0),
-            },
+            }),
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
         }

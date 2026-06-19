@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     max_top_k: int = 20
     similarity_threshold: float = 0.7
 
+    # Processing
+    max_file_size_mb: int = 50
+    embedding_batch_size: int = 32
+    vector_dimension: int = 1024
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

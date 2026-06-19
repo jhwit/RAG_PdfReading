@@ -18,7 +18,7 @@ class VectorStore:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.collection = settings.qdrant_collection
-        self.vector_size = 1024  # BGE-M3 dimension
+        self.vector_size = settings.vector_dimension
         self._client: Optional[AsyncQdrantClient] = None
 
     @property

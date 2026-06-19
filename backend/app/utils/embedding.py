@@ -38,5 +38,5 @@ class EmbeddingService:
         return self.model.get_text_embedding(text)
 
     def get_dimension(self) -> int:
-        """Get the embedding vector dimension."""
-        return 1024  # BGE-M3 dimension
+        """Get the embedding vector dimension from settings."""
+        return self.settings.vector_dimension
