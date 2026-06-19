@@ -1,25 +1,20 @@
 """Query / Q&A API endpoints."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
-from app.core.config import Settings, get_settings
+from app.core.config import get_settings
 from app.models.schemas import QueryRequest, QueryResponse
 from app.services.rag_service import RAGService
-from app.services.vector_store import VectorStore
-from app.utils.embedding import EmbeddingService
 
 router = APIRouter(prefix="/query", tags=["Query"])
 
 
-def get_rag_service(
-    settings: Settings = Depends(get_settings),
-) -> RAGService:
-    """Dependency injection for RAGService."""
-    embedding_service = EmbeddingService(settings)
-    vector_store = VectorStore(settings)
+def get_rag_service(request: Request) -> RAGService:
+    """Dependency injection for RAGService — uses app.state singletons."""
+    settings = get_settings()
     return RAGService(
         settings=settings,
-        embedding_service=embedding_service,
-        vector_store=vector_store,
+        embedding_service=request.app.state.embedding_service,
+        vector_store=request.app.state.vector_store,
     )
 
 

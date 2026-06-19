@@ -7,6 +7,8 @@ from app.core.config import get_settings
 from app.core.exceptions import setup_exception_handlers
 from app.core.logger import setup_logger
 from app.api import health, documents, query
+from app.services.vector_store import VectorStore
+from app.utils.embedding import EmbeddingService
 
 settings = get_settings()
 logger = setup_logger("rag_kb")
@@ -19,7 +21,17 @@ async def lifespan(app: FastAPI):
     logger.info(f"Embedding model: {settings.embedding_model}")
     logger.info(f"LLM model: {settings.llm_model}")
     logger.info(f"Qdrant: {settings.qdrant_host}:{settings.qdrant_port}")
+
+    # Initialize and connect services
+    app.state.vector_store = VectorStore(settings)
+    await app.state.vector_store.connect()
+    app.state.embedding_service = EmbeddingService(settings)
+    logger.info("Services initialized")
+
     yield
+
+    # Shutdown
+    await app.state.vector_store.close()
     logger.info("Shutting down")
 
 

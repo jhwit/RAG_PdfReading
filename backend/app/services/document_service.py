@@ -3,11 +3,11 @@ import uuid
 import os
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from fastapi import UploadFile
 from fastapi.concurrency import run_in_threadpool
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 from app.core.exceptions import (
     DocumentNotFound, PDFParseError, InvalidFileTypeError, FileTooLargeError
 )
@@ -59,7 +59,7 @@ class DocumentService:
         if size > MAX_FILE_SIZE:
             raise FileTooLargeError()
 
-    async def save_upload(self, file: UploadFile) -> Path:
+    async def save_upload(self, file: UploadFile) -> Tuple[Path, str]:
         """Save uploaded file to disk with UUID name."""
         os.makedirs(self.settings.doc_dir, exist_ok=True)
 

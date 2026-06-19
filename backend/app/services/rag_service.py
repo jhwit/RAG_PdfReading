@@ -1,11 +1,6 @@
 """RAG query pipeline service."""
 import time
 from typing import List, Optional, AsyncGenerator, Dict, Any
-from llama_index.core import VectorStoreIndex, Settings as LlamaSettings
-from llama_index.core.retrievers import VectorIndexRetriever
-from llama_index.core.query_engine import RetrieverQueryEngine
-from llama_index.core.postprocessor import SimilarityPostprocessor
-from llama_index.core.schema import NodeWithScore
 from llama_index.llms.openai import OpenAI
 
 from app.core.config import Settings
@@ -51,7 +46,7 @@ class RAGService:
         filter_doc_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Execute a RAG query and return answer with sources."""
-        self._validate_query(question, top_k)
+        top_k = self._validate_query(question, top_k)
 
         start_time = time.time()
 
@@ -111,7 +106,7 @@ class RAGService:
         filter_doc_ids: Optional[List[str]] = None,
     ) -> AsyncGenerator[str, None]:
         """Execute a RAG query with streaming SSE response."""
-        self._validate_query(question, top_k)
+        top_k = self._validate_query(question, top_k)
 
         start_time = time.time()
 
@@ -177,14 +172,13 @@ class RAGService:
             yield self._sse_event("error", {"message": str(e)})
             yield self._sse_event("end", {"query_time_ms": int((time.time() - start_time) * 1000)})
 
-    def _validate_query(self, question: str, top_k: int):
-        """Validate query parameters."""
+    def _validate_query(self, question: str, top_k: int) -> int:
+        """Validate query parameters and return clamped top_k."""
         if not question or not question.strip():
             raise EmptyQueryError()
         if len(question) > 2000:
             raise QueryTooLongError()
-        if top_k < 1 or top_k > self.settings.max_top_k:
-            top_k = self.settings.default_top_k
+        return min(max(top_k, 1), self.settings.max_top_k)
 
     async def _embed_query(self, text: str) -> List[float]:
         """Generate embedding for a query."""
