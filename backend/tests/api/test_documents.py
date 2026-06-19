@@ -1,55 +1,54 @@
 """Tests for document API endpoints."""
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from httpx import AsyncClient, ASGITransport
 
 
 @pytest.fixture
 def _setup_app():
-    """Import the app and set required state mocks (lifespan does not run with ASGITransport)."""
+    """Import the app and set required state singletons (lifespan does not run with ASGITransport)."""
     from app.main import app
 
+    # VectorStore mock
     mock_vs = MagicMock()
     mock_vs.connect = AsyncMock()
     mock_vs.close = AsyncMock()
+    mock_vs.is_connected = MagicMock(return_value=True)
     app.state.vector_store = mock_vs
+
+    # EmbeddingService mock
     app.state.embedding_service = MagicMock()
+
+    # DocumentService mock (singleton — the API reads from app.state)
+    mock_ds = MagicMock()
+    mock_ds.get_documents.return_value = []
+    mock_ds.get_document.return_value = {
+        "doc_id": "doc_test123",
+        "filename": "test.pdf",
+        "status": "completed",
+        "total_pages": 10,
+        "total_chunks": 20,
+        "created_at": "2026-06-19T00:00:00Z",
+        "updated_at": "2026-06-19T00:05:00Z",
+    }
+    mock_ds.get_status.return_value = {
+        "doc_id": "doc_test123",
+        "status": "completed",
+        "progress": 100,
+        "message": "Done",
+        "updated_at": "2026-06-19T00:05:00Z",
+    }
+    mock_ds.delete_document = AsyncMock(return_value={
+        "doc_id": "doc_test123",
+        "deleted": True,
+    })
+    app.state.document_service = mock_ds
 
     yield app
 
 
-@pytest.fixture
-def mock_document_service():
-    """Mock DocumentService for API tests."""
-    with patch("app.api.documents.DocumentService") as mock:
-        service = MagicMock()
-        service.get_documents.return_value = []
-        service.get_document.return_value = {
-            "doc_id": "doc_test123",
-            "filename": "test.pdf",
-            "status": "completed",
-            "total_pages": 10,
-            "total_chunks": 20,
-            "created_at": "2026-06-19T00:00:00Z",
-            "updated_at": "2026-06-19T00:05:00Z",
-        }
-        service.get_status.return_value = {
-            "doc_id": "doc_test123",
-            "status": "completed",
-            "progress": 100,
-            "message": "Done",
-            "updated_at": "2026-06-19T00:05:00Z",
-        }
-        service.delete_document = AsyncMock(return_value={
-            "doc_id": "doc_test123",
-            "deleted": True,
-        })
-        mock.return_value = service
-        yield service
-
-
 @pytest.mark.asyncio
-async def test_list_documents_empty(_setup_app, mock_document_service):
+async def test_list_documents_empty(_setup_app):
     from app.main import app
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -61,7 +60,7 @@ async def test_list_documents_empty(_setup_app, mock_document_service):
 
 
 @pytest.mark.asyncio
-async def test_get_document(_setup_app, mock_document_service):
+async def test_get_document(_setup_app):
     from app.main import app
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -73,7 +72,7 @@ async def test_get_document(_setup_app, mock_document_service):
 
 
 @pytest.mark.asyncio
-async def test_get_document_status(_setup_app, mock_document_service):
+async def test_get_document_status(_setup_app):
     from app.main import app
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -85,7 +84,7 @@ async def test_get_document_status(_setup_app, mock_document_service):
 
 
 @pytest.mark.asyncio
-async def test_delete_document(_setup_app, mock_document_service):
+async def test_delete_document(_setup_app):
     from app.main import app
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

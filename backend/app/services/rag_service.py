@@ -49,25 +49,43 @@ class RAGService:
         top_k = self._validate_query(question, top_k)
 
         start_time = time.time()
+        sources = []
+        context = ""
 
         try:
-            # Generate query embedding
-            query_vector = await self._embed_query(question)
+            # Step 1: Generate query embedding
+            try:
+                query_vector = await self._embed_query(question)
+            except Exception as e:
+                logger.error(f"Embedding failed: {e}")
+                return self._fallback_answer(
+                    "嵌入模型暂时不可用，请稍后重试。",
+                    int((time.time() - start_time) * 1000),
+                )
 
-            # Search Qdrant
-            results = await self.vector_store.search(
-                vector=query_vector,
-                top_k=top_k,
-                filter_doc_ids=filter_doc_ids,
-            )
+            # Step 2: Search Qdrant (skip if unavailable)
+            if self.vector_store.is_connected():
+                try:
+                    results = await self.vector_store.search(
+                        vector=query_vector,
+                        top_k=top_k,
+                        filter_doc_ids=filter_doc_ids,
+                    )
+                    if results:
+                        context, sources = self._build_context_and_sources(results)
+                except Exception as e:
+                    logger.warning(f"Qdrant search failed (continuing without context): {e}")
+            else:
+                logger.warning("Qdrant unavailable — answering without document context")
 
-            if not results:
-                raise NoRelevantDocsError()
+            if not context:
+                # No documents indexed yet
+                return self._fallback_answer(
+                    "知识库中没有相关文档。请先上传国家标准 PDF 文件。",
+                    int((time.time() - start_time) * 1000),
+                )
 
-            # Build context from retrieved chunks
-            context, sources = self._build_context_and_sources(results)
-
-            # Generate answer with LLM
+            # Step 3: Generate answer with LLM
             prompt = self._build_prompt(question, context)
             answer = await self._generate(prompt)
 
@@ -80,11 +98,14 @@ class RAGService:
                 "model": self.settings.llm_model,
             }
 
-        except (EmptyQueryError, QueryTooLongError, NoRelevantDocsError):
+        except (EmptyQueryError, QueryTooLongError):
             raise
         except Exception as e:
             logger.error(f"RAG query failed: {str(e)}")
-            raise LLMUnavailableError(str(e))
+            return self._fallback_answer(
+                f"抱歉，问答服务暂时不可用：{str(e)}",
+                int((time.time() - start_time) * 1000),
+            )
 
     async def query_stream(
         self,
@@ -100,26 +121,40 @@ class RAGService:
         yield self._sse_event("start", {"query_time_ms": 0})
 
         try:
-            # Generate query embedding
-            query_vector = await self._embed_query(question)
-
-            # Search Qdrant
-            results = await self.vector_store.search(
-                vector=query_vector,
-                top_k=top_k,
-                filter_doc_ids=filter_doc_ids,
-            )
-
-            if not results:
-                yield self._sse_event("error", {"message": "No relevant documents found"})
+            # Step 1: Generate query embedding
+            try:
+                query_vector = await self._embed_query(question)
+            except Exception as e:
+                logger.error(f"Embedding failed: {e}")
+                yield self._sse_event("chunk", {"content": "嵌入模型暂时不可用，请稍后重试。"})
+                yield self._sse_event("sources", {"sources": []})
                 yield self._sse_event("end", {"query_time_ms": int((time.time() - start_time) * 1000)})
                 return
 
-            # Build context
-            context, sources = self._build_context_and_sources(results)
+            # Step 2: Search Qdrant (skip if unavailable)
+            context = ""
+            sources = []
+            if self.vector_store.is_connected():
+                try:
+                    results = await self.vector_store.search(
+                        vector=query_vector,
+                        top_k=top_k,
+                        filter_doc_ids=filter_doc_ids,
+                    )
+                    if results:
+                        context, sources = self._build_context_and_sources(results)
+                except Exception as e:
+                    logger.warning(f"Qdrant search failed: {e}")
+
+            if not context:
+                yield self._sse_event("chunk", {"content": "知识库中没有相关文档。请先上传国家标准 PDF 文件。"})
+                yield self._sse_event("sources", {"sources": []})
+                yield self._sse_event("end", {"query_time_ms": int((time.time() - start_time) * 1000)})
+                return
+
+            # Step 3: Generate streaming LLM answer
             prompt = self._build_prompt(question, context)
 
-            # Streaming LLM response
             try:
                 response = self.llm.stream_complete(prompt)
                 for chunk in response:
@@ -130,10 +165,12 @@ class RAGService:
                 # Fallback: non-streaming LLM
                 answer = self.llm.complete(prompt)
                 text = answer.text if hasattr(answer, 'text') else str(answer)
-                # Simulate streaming by chunking the output
                 chunk_size = 10
                 for i in range(0, len(text), chunk_size):
                     yield self._sse_event("chunk", {"content": text[i:i + chunk_size]})
+            except Exception as e:
+                logger.error(f"LLM generation failed: {e}")
+                yield self._sse_event("chunk", {"content": f"抱歉，AI 回答生成失败：{str(e)}"})
 
             # Send sources
             yield self._sse_event("sources", {"sources": sources})
@@ -143,7 +180,7 @@ class RAGService:
 
         except Exception as e:
             logger.error(f"Streaming query failed: {str(e)}")
-            yield self._sse_event("error", {"message": str(e)})
+            yield self._sse_event("chunk", {"content": f"抱歉，问答服务暂时不可用：{str(e)}"})
             yield self._sse_event("end", {"query_time_ms": int((time.time() - start_time) * 1000)})
 
     def _build_context_and_sources(self, results: List[dict]) -> tuple:
@@ -204,6 +241,15 @@ class RAGService:
 用户问题：{question}
 
 请回答："""
+
+    def _fallback_answer(self, message: str, query_time_ms: int) -> dict:
+        """Return a graceful fallback answer when services are unavailable."""
+        return {
+            "answer": message,
+            "sources": [],
+            "query_time_ms": query_time_ms,
+            "model": "fallback",
+        }
 
     def _sse_event(self, event_type: str, data: dict) -> str:
         """Format a Server-Sent Event."""

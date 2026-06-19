@@ -1,36 +1,23 @@
 """Document management API endpoints."""
 from fastapi import APIRouter, Request, UploadFile, File, Depends, Path, status as http_status
-from app.core.config import Settings, get_settings
+from app.core.config import get_settings
 from app.core.exceptions import DocumentNotFound
 from app.services.document_service import DocumentService
-from app.utils.text_splitter import TextSplitter
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
 def get_document_service(request: Request) -> DocumentService:
-    """Dependency injection for DocumentService — uses app.state singletons."""
-    settings = get_settings()
-    text_splitter = TextSplitter(settings)
-    vector_store = request.app.state.vector_store
-    embedding_service = request.app.state.embedding_service
-    return DocumentService(
-        settings=settings,
-        text_splitter=text_splitter,
-        embedding_service=embedding_service,
-        vector_store=vector_store,
-    )
+    """Get the singleton DocumentService from app.state."""
+    return request.app.state.document_service
 
 
 @router.post(
     "/upload",
-    # response_model=dict is intentional: the endpoint returns a dynamic "data" payload
-    # whose shape varies with document state. A proper TypedDict / Pydantic model can
-    # replace this once the response schema stabilizes.
     response_model=dict,
     status_code=http_status.HTTP_201_CREATED,
     summary="Upload PDF document",
-    description="Upload a national standard PDF file. The backend will parse, chunk, embed, and index it asynchronously."
+    description="Upload a national standard PDF file. The backend returns immediately and processes the file in the background."
 )
 async def upload_document(
     file: UploadFile = File(..., description="PDF file, max 50MB"),

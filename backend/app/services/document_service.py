@@ -1,6 +1,7 @@
 """Document processing and management service."""
 import uuid
 import os
+import asyncio
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
@@ -23,7 +24,11 @@ ALLOWED_MIME = {"application/pdf"}
 
 
 class DocumentService:
-    """Manages document lifecycle: upload, parse, chunk, embed, index, query, delete."""
+    """Manages document lifecycle: upload, parse, chunk, embed, index, query, delete.
+
+    IMPORTANT: This service MUST be a singleton stored on app.state.
+    The _documents dict is in-memory and shared across all requests.
+    """
 
     def __init__(
         self,
@@ -37,7 +42,7 @@ class DocumentService:
         self.embedding_service = embedding_service
         self.vector_store = vector_store
         self.pdf_parser = PDFParser()
-        # In-memory document metadata store (production would use a real DB)
+        # In-memory document metadata store (shared across requests via singleton)
         self._documents: Dict[str, Dict[str, Any]] = {}
 
     def validate_file(self, file: UploadFile) -> None:
@@ -73,7 +78,10 @@ class DocumentService:
         return file_path, doc_id
 
     async def process_document(self, file: UploadFile) -> dict:
-        """Full document processing pipeline: validate → save → parse → chunk → embed → index."""
+        """Upload & queue document for processing. Returns immediately with 'pending' status.
+
+        Processing (parse → chunk → embed → index) runs in the background.
+        """
         # Validate
         self.validate_file(file)
 
@@ -94,7 +102,17 @@ class DocumentService:
         }
         self._documents[doc_id] = doc_record
 
-        # Process asynchronously (in production: background task queue)
+        # Launch background processing — don't await it
+        asyncio.create_task(self._process_background(file_path, doc_id, filename))
+
+        return doc_record
+
+    async def _process_background(self, file_path: Path, doc_id: str, filename: str):
+        """Background task: parse → chunk → embed → index."""
+        doc_record = self._documents.get(doc_id)
+        if not doc_record:
+            return  # document was deleted before processing started
+
         try:
             doc_record["status"] = "processing"
             doc_record["message"] = "Parsing PDF"
@@ -130,6 +148,12 @@ class DocumentService:
             doc_record["message"] = f"Chunked into {len(all_chunks)} segments"
             doc_record["total_chunks"] = len(all_chunks)
 
+            if not all_chunks:
+                doc_record["status"] = "completed"
+                doc_record["message"] = "No text content found in PDF"
+                doc_record["updated_at"] = datetime.utcnow().isoformat()
+                return
+
             # Generate embeddings in batches
             batch_size = self.settings.embedding_batch_size
             texts = [c["content"] for c in all_chunks]
@@ -141,8 +165,9 @@ class DocumentService:
                     self.embedding_service.embed_texts, batch_texts
                 )
                 all_embeddings.extend(batch_embeddings)
-                progress = min(100, int((i + len(batch_texts)) / len(texts) * 100))
-                doc_record["message"] = f"Embedding chunks: {i + len(batch_texts)}/{len(texts)}"
+                done_count = min(i + batch_size, len(texts))
+                progress = min(100, int(done_count / len(texts) * 100))
+                doc_record["message"] = f"Embedding chunks: {done_count}/{len(texts)}"
                 doc_record["updated_at"] = datetime.utcnow().isoformat()
 
             # Prepare Qdrant points
@@ -162,12 +187,16 @@ class DocumentService:
                     },
                 })
 
-            # Upsert to Qdrant
+            # Upsert to Qdrant (skip if unavailable)
             doc_record["message"] = f"Indexing {len(points)} vectors"
-            await self.vector_store.upsert(points)
+            if self.vector_store.is_connected():
+                await self.vector_store.upsert(points)
+                doc_record["message"] = "Processing complete"
+            else:
+                logger.warning("Qdrant unavailable — vectors not indexed")
+                doc_record["message"] = "Processed but vectors not indexed (Qdrant unavailable)"
 
             doc_record["status"] = "completed"
-            doc_record["message"] = "Processing complete"
             doc_record["updated_at"] = datetime.utcnow().isoformat()
 
         except Exception as e:
@@ -175,8 +204,6 @@ class DocumentService:
             doc_record["status"] = "failed"
             doc_record["message"] = str(e)
             doc_record["updated_at"] = datetime.utcnow().isoformat()
-
-        return doc_record
 
     def get_document(self, doc_id: str) -> dict:
         """Get a single document record."""
@@ -206,8 +233,9 @@ class DocumentService:
         if doc_id not in self._documents:
             raise DocumentNotFound(doc_id)
 
-        # Delete vectors from Qdrant
-        await self.vector_store.delete_by_doc_id(doc_id)
+        # Delete vectors from Qdrant (skip if unavailable)
+        if self.vector_store.is_connected():
+            await self.vector_store.delete_by_doc_id(doc_id)
 
         # Delete file from disk
         file_path = Path(self.settings.doc_dir) / f"{doc_id}.pdf"

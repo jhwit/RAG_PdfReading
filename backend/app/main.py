@@ -8,7 +8,9 @@ from app.core.exceptions import setup_exception_handlers
 from app.core.logger import setup_logger
 from app.api import health, documents, query
 from app.services.vector_store import VectorStore
+from app.services.document_service import DocumentService
 from app.utils.embedding import EmbeddingService
+from app.utils.text_splitter import TextSplitter
 
 settings = get_settings()
 logger = setup_logger("rag_kb")
@@ -22,10 +24,28 @@ async def lifespan(app: FastAPI):
     logger.info(f"LLM model: {settings.llm_model}")
     logger.info(f"Qdrant: {settings.qdrant_host}:{settings.qdrant_port}")
 
-    # Initialize and connect services
+    # ── Initialize shared services ──
+
+    # VectorStore — connect to Qdrant (non-fatal if unavailable)
     app.state.vector_store = VectorStore(settings)
     await app.state.vector_store.connect()
+
+    # EmbeddingService — preload model at startup
     app.state.embedding_service = EmbeddingService(settings)
+    logger.info("Preloading embedding model (this may take a moment)...")
+    try:
+        _ = app.state.embedding_service.model  # trigger lazy load
+        logger.info(f"Embedding model loaded: {settings.embedding_model}")
+    except Exception as e:
+        logger.warning(f"Embedding model preload failed (will retry on first use): {e}")
+
+    # DocumentService — singleton so _documents survives across requests
+    app.state.document_service = DocumentService(
+        settings=settings,
+        text_splitter=TextSplitter(settings),
+        embedding_service=app.state.embedding_service,
+        vector_store=app.state.vector_store,
+    )
     logger.info("Services initialized")
 
     yield
