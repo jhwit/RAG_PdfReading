@@ -17,6 +17,9 @@
             第 {{ source.page }} 页
           </el-tag>
         </div>
+        <div v-if="source.excerpt" class="source-excerpt">
+          <el-text size="small" truncated>{{ source.excerpt }}</el-text>
+        </div>
         <div class="source-meta">
           <span class="source-score">
             相似度: {{ (source.score * 100).toFixed(1) }}%
@@ -97,6 +100,19 @@ defineProps({
 
 .source-page {
   flex-shrink: 0;
+}
+
+.source-excerpt {
+  padding-left: 20px;
+  margin-bottom: 6px;
+  color: var(--el-text-color-regular);
+  line-height: 1.7;
+  font-size: 13px;
+  border-left: 3px solid var(--el-border-color);
+  padding-left: 14px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 4px;
+  padding: 6px 10px;
 }
 
 .source-meta {

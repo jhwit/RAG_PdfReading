@@ -10,6 +10,25 @@ from app.core.logger import setup_logger
 logger = setup_logger("rag_kb.rag")
 
 
+def _patch_llama_index_models(model_name: str):
+    """Register a custom model so llama_index's OpenAI wrapper accepts it.
+
+    llama_index validates model names against hardcoded lists; third-party
+    OpenAI-compatible endpoints (DeepSeek, etc.) are not in those lists.
+    This patches the model registry at import time to allow arbitrary models.
+    """
+    try:
+        from llama_index.llms.openai import utils as openai_utils
+
+        if model_name not in openai_utils.ALL_AVAILABLE_MODELS:
+            openai_utils.ALL_AVAILABLE_MODELS[model_name] = 128_000
+        if model_name not in openai_utils.CHAT_MODELS:
+            openai_utils.CHAT_MODELS[model_name] = True
+        logger.debug(f"Registered custom model: {model_name}")
+    except Exception:
+        pass  # best-effort; if this fails the LLM call will fail with a clear error
+
+
 class RAGService:
     """Orchestrates the RAG pipeline: retrieve -> synthesize -> answer."""
 
@@ -23,6 +42,19 @@ class RAGService:
         self.embedding_service = embedding_service
         self.vector_store = vector_store
         self._llm = None
+        # Answer quality agent (loaded lazily)
+        self._answer_agent = None
+        # Register custom model if using a third-party endpoint
+        if settings.openai_base_url:
+            _patch_llama_index_models(settings.llm_model)
+
+    @property
+    def answer_agent(self):
+        """Lazy-load the AnswerAgent."""
+        if self._answer_agent is None:
+            from app.services.answer_agent import AnswerAgent
+            self._answer_agent = AnswerAgent(self.llm)
+        return self._answer_agent
 
     @property
     def llm(self):
@@ -87,12 +119,19 @@ class RAGService:
 
             # Step 3: Generate answer with LLM
             prompt = self._build_prompt(question, context)
-            answer = await self._generate(prompt)
+            raw_answer = await self._generate(prompt)
+
+            # Step 4: Post-process with AnswerAgent for quality
+            if context:
+                reviewed = self.answer_agent.rewrite_if_needed(question, context, raw_answer)
+                final_answer = reviewed["answer"]
+            else:
+                final_answer = raw_answer
 
             query_time_ms = int((time.time() - start_time) * 1000)
 
             return {
-                "answer": answer,
+                "answer": final_answer,
                 "sources": sources,
                 "query_time_ms": query_time_ms,
                 "model": self.settings.llm_model,
@@ -189,17 +228,24 @@ class RAGService:
         sources = []
         for hit in results:
             payload = hit["payload"]
+            full_content = payload.get('content', '')
             context_parts.append(
                 f"[来源: {payload.get('doc_name', '')}, 第{payload.get('page', '?')}页]\n"
-                f"{payload.get('content', '')}"
+                f"{full_content}"
             )
+            # Include a readable excerpt (first 200 chars) for frontend display
+            excerpt = full_content[:200].replace('\n', ' ').strip()
+            if len(full_content) > 200:
+                excerpt += '...'
             sources.append({
                 "doc_id": payload.get("doc_id", ""),
                 "doc_name": payload.get("doc_name", ""),
                 "page": payload.get("page"),
                 "chunk_index": payload.get("chunk_index"),
                 "score": round(hit["score"], 4),
+                "excerpt": excerpt,
             })
+        return "\n\n---\n\n".join(context_parts), sources
         return "\n\n---\n\n".join(context_parts), sources
 
     def _validate_query(self, question: str, top_k: int) -> int:

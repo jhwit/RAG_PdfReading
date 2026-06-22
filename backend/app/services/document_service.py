@@ -44,6 +44,40 @@ class DocumentService:
         self.pdf_parser = PDFParser()
         # In-memory document metadata store (shared across requests via singleton)
         self._documents: Dict[str, Dict[str, Any]] = {}
+        # Recover persisted document metadata from disk
+        self._recover_from_disk()
+
+    def _recover_from_disk(self):
+        """Scan doc_dir for .meta.json files and rebuild _documents index."""
+        import json
+        doc_dir = Path(self.settings.doc_dir)
+        if not doc_dir.exists():
+            return
+        meta_files = sorted(doc_dir.glob("*.meta.json"))
+        if not meta_files:
+            return
+        for mf in meta_files:
+            try:
+                with open(mf, "r", encoding="utf-8") as f:
+                    doc = json.load(f)
+                doc_id = doc.get("doc_id", mf.stem.replace(".meta", ""))
+                self._documents[doc_id] = doc
+            except Exception as e:
+                logger.warning(f"Failed to recover metadata from {mf.name}: {e}")
+        logger.info(f"Recovered {len(self._documents)} document(s) from disk")
+
+    def _save_meta_to_disk(self, doc_id: str):
+        """Persist a single document's metadata to doc_dir/<doc_id>.meta.json."""
+        import json
+        doc = self._documents.get(doc_id)
+        if not doc:
+            return
+        meta_path = Path(self.settings.doc_dir) / f"{doc_id}.meta.json"
+        try:
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(doc, f, ensure_ascii=False, indent=2, default=str)
+        except Exception as e:
+            logger.warning(f"Failed to persist metadata for {doc_id}: {e}")
 
     def validate_file(self, file: UploadFile) -> None:
         """Validate uploaded file type and size."""
@@ -101,6 +135,7 @@ class DocumentService:
             "updated_at": datetime.utcnow().isoformat(),
         }
         self._documents[doc_id] = doc_record
+        self._save_meta_to_disk(doc_id)
 
         # Launch background processing — don't await it
         asyncio.create_task(self._process_background(file_path, doc_id, filename))
@@ -170,11 +205,12 @@ class DocumentService:
                 doc_record["message"] = f"Embedding chunks: {done_count}/{len(texts)}"
                 doc_record["updated_at"] = datetime.utcnow().isoformat()
 
-            # Prepare Qdrant points
+            # Prepare Qdrant points (Qdrant requires UUID or unsigned int IDs)
             points = []
             for i, chunk in enumerate(all_chunks):
+                import uuid as _uuid
                 points.append({
-                    "id": f"{doc_id}_{i}",
+                    "id": str(_uuid.uuid4()),
                     "vector": all_embeddings[i],
                     "payload": {
                         "doc_id": doc_id,
@@ -204,6 +240,8 @@ class DocumentService:
             doc_record["status"] = "failed"
             doc_record["message"] = str(e)
             doc_record["updated_at"] = datetime.utcnow().isoformat()
+
+        self._save_meta_to_disk(doc_id)
 
     def get_document(self, doc_id: str) -> dict:
         """Get a single document record."""
@@ -237,10 +275,13 @@ class DocumentService:
         if self.vector_store.is_connected():
             await self.vector_store.delete_by_doc_id(doc_id)
 
-        # Delete file from disk
+        # Delete file and metadata from disk
         file_path = Path(self.settings.doc_dir) / f"{doc_id}.pdf"
+        meta_path = Path(self.settings.doc_dir) / f"{doc_id}.meta.json"
         if file_path.exists():
             os.remove(file_path)
+        if meta_path.exists():
+            os.remove(meta_path)
 
         # Remove from in-memory store
         del self._documents[doc_id]
