@@ -1,4 +1,4 @@
-node_modules/
+0node_modules/
 dist/
 .env
 *.pyc
@@ -8,3 +8,4 @@ venv/
 *.egg-info/
 logs/
 .DS_Store
+docs/
