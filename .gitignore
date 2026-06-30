@@ -1,11 +1,43 @@
-0node_modules/
+# 前端依赖与构建产物
+node_modules/
 dist/
+
+# 环境变量（含 API 密钥等敏感信息）
 .env
+.env.production
+backend/.env
+frontend/.env
+
+# Python
 *.pyc
 __pycache__/
 .venv/
 venv/
 *.egg-info/
+
+# 日志
 logs/
-.DS_Store
+backend/logs/
+*.log
+
+# 数据文件（PDF、向量数据库、用户上传内容）
+data/
+backend/data/
+
+# IDE 配置
+.idea/
+backend/.idea/
+
+# 测试缓存
+.pytest_cache/
+backend/.pytest_cache/
+
+# Claude Code 配置
+.claude/
+backend/.claude/
+
+# 文档（不需要上传）
 docs/
+
+# macOS 系统文件
+.DS_Store
