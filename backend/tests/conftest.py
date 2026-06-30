@@ -1,4 +1,4 @@
-"""Shared pytest fixtures."""
+"""共享 pytest 固件。"""
 import pytest
 from app.core.config import Settings
 
@@ -14,9 +14,9 @@ def settings() -> Settings:
 
 @pytest.fixture
 def sample_pdf_path(tmp_path):
-    """Create a minimal valid PDF file for testing."""
+    """创建一个最小的有效 PDF 文件用于测试。"""
     pdf_path = tmp_path / "test.pdf"
-    # Minimal PDF content
+    # 最小 PDF 内容
     pdf_content = (
         b"%PDF-1.4\n"
         b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"

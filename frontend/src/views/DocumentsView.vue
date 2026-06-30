@@ -9,20 +9,32 @@
         :documents="store.documents"
         :loading="store.loading"
         @delete="handleDelete"
+        @view-chunks="handleViewChunks"
       />
     </div>
+
+    <ChunkViewer
+      v-model="chunkViewerVisible"
+      :doc-id="selectedDocId"
+      :doc-name="selectedDocName"
+    />
   </div>
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useDocumentStore } from '@/stores/documents.js'
 import AppHeader from '@/components/AppHeader.vue'
 import UploadPanel from '@/components/UploadPanel.vue'
 import DocumentList from '@/components/DocumentList.vue'
+import ChunkViewer from '@/components/ChunkViewer.vue'
 
 const store = useDocumentStore()
+
+const chunkViewerVisible = ref(false)
+const selectedDocId = ref('')
+const selectedDocName = ref('')
 
 const handleUploadSuccess = () => {
   store.fetchDocuments()
@@ -35,6 +47,12 @@ const handleDelete = async (docId) => {
   } catch (error) {
     ElMessage.error('删除失败')
   }
+}
+
+const handleViewChunks = (row) => {
+  selectedDocId.value = row.doc_id
+  selectedDocName.value = row.filename
+  chunkViewerVisible.value = true
 }
 
 onMounted(() => {

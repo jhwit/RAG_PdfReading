@@ -1,12 +1,12 @@
-"""Tests for PDF parser."""
+"""PDF 解析器测试。"""
 from app.utils.pdf_parser import PDFParser
 
 
 def test_parse_extracts_text(sample_pdf_path):
     parser = PDFParser()
     chunks = parser.parse(sample_pdf_path)
-    assert len(chunks) > 0, "Should extract at least one text chunk"
-    assert any("Hello World" in c.content for c in chunks), "Should contain the embedded text"
+    assert len(chunks) > 0, "应至少提取一个文本片段"
+    assert any("Hello World" in c.content for c in chunks), "应包含嵌入的文本"
 
 
 def test_get_metadata(sample_pdf_path):

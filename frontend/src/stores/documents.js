@@ -56,6 +56,11 @@ export const useDocumentStore = defineStore('documents', () => {
     documents.value = documents.value.filter(d => d.doc_id !== docId)
   }
 
+  const fetchChunks = async (docId) => {
+    const res = await documentsApi.getChunks(docId)
+    return res.data || []
+  }
+
   return {
     documents,
     loading,
@@ -66,6 +71,7 @@ export const useDocumentStore = defineStore('documents', () => {
     docCount,
     fetchDocuments,
     uploadDocument,
-    removeDocument
+    removeDocument,
+    fetchChunks
   }
 })

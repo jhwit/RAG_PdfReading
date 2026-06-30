@@ -1,4 +1,4 @@
-"""Tests for text splitter."""
+"""文本分块器测试。"""
 from app.core.config import Settings
 from app.utils.text_splitter import TextSplitter
 
@@ -11,7 +11,7 @@ def test_split_empty_text():
 
 def test_split_short_text():
     splitter = TextSplitter(Settings(chunk_size=512, chunk_overlap=50))
-    text = "This is a short text."
+    text = "这是一段短文本。"
     chunks = splitter.split(text, "doc1", "test.pdf", 1)
     assert len(chunks) == 1
     assert chunks[0]["content"] == text
@@ -32,7 +32,7 @@ def test_split_long_text():
 
 def test_chunk_metadata():
     splitter = TextSplitter(Settings(chunk_size=512, chunk_overlap=50))
-    text = "Paragraph one.\n\nParagraph two."
+    text = "第一段。\n\n第二段。"
     chunks = splitter.split(text, "doc_x", "file.pdf", 5)
     assert len(chunks) > 0
     for chunk in chunks:

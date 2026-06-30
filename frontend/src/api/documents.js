@@ -37,5 +37,10 @@ export const documentsApi = {
   /** 获取文档处理状态 */
   getStatus(docId) {
     return client.get(`/documents/${docId}/status`)
+  },
+
+  /** 获取文档分块内容 */
+  getChunks(docId) {
+    return client.get(`/documents/${docId}/chunks`)
   }
 }

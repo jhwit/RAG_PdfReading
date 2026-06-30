@@ -29,8 +29,16 @@
           {{ formatDate(row.created_at) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
+          <el-button
+            type="primary"
+            size="small"
+            text
+            @click="handleViewChunks(row)"
+          >
+            查看分块
+          </el-button>
           <el-popconfirm
             title="确定要删除该文档吗？"
             confirm-button-text="确定"
@@ -64,10 +72,14 @@ defineProps({
   }
 })
 
-const emit = defineEmits(['delete'])
+const emit = defineEmits(['delete', 'view-chunks'])
 
 const handleDelete = (docId) => {
   emit('delete', docId)
+}
+
+const handleViewChunks = (row) => {
+  emit('view-chunks', row)
 }
 </script>
 

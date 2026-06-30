@@ -1,4 +1,4 @@
-"""Tests for health check endpoint."""
+"""健康检查端点测试。"""
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 from httpx import AsyncClient, ASGITransport
@@ -6,7 +6,7 @@ from httpx import AsyncClient, ASGITransport
 
 @pytest.fixture
 def _setup_app():
-    """Import the app and set required state mocks (lifespan does not run with ASGITransport)."""
+    """导入应用并设置所需的 state 单例（ASGITransport 不会运行 lifespan）。"""
     from app.main import app
 
     mock_vs = MagicMock()

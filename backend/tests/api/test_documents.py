@@ -1,4 +1,4 @@
-"""Tests for document API endpoints."""
+"""文档 API 端点测试。"""
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from httpx import AsyncClient, ASGITransport
@@ -6,20 +6,20 @@ from httpx import AsyncClient, ASGITransport
 
 @pytest.fixture
 def _setup_app():
-    """Import the app and set required state singletons (lifespan does not run with ASGITransport)."""
+    """导入应用并设置所需的 state 单例（ASGITransport 不会运行 lifespan）。"""
     from app.main import app
 
-    # VectorStore mock
+    # VectorStore 模拟
     mock_vs = MagicMock()
     mock_vs.connect = AsyncMock()
     mock_vs.close = AsyncMock()
     mock_vs.is_connected = MagicMock(return_value=True)
     app.state.vector_store = mock_vs
 
-    # EmbeddingService mock
+    # EmbeddingService 模拟
     app.state.embedding_service = MagicMock()
 
-    # DocumentService mock (singleton — the API reads from app.state)
+    # DocumentService 模拟（单例 — API 从 app.state 读取）
     mock_ds = MagicMock()
     mock_ds.get_documents.return_value = []
     mock_ds.get_document.return_value = {
